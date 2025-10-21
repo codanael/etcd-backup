@@ -1,0 +1,52 @@
+# Example Kubernetes EncryptionConfiguration for AES-CBC
+# This file is passed to kube-apiserver with --encryption-provider-config flag
+#
+# Usage:
+# kube-apiserver --encryption-provider-config=/etc/kubernetes/encryption-config.yaml
+
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+      - configmaps
+    providers:
+      # AES-CBC provider - encrypts secrets at rest
+      - aescbc:
+          keys:
+            # Primary key (used for new encryptions)
+            - name: key1
+              # Generate with: head -c 32 /dev/urandom | base64
+              # This is a sample key - REPLACE with your own!
+              secret: y0xTt+U6xgRdNxe4nDYYsijOGgRDoUYC+wAwOKeNfPs=
+
+            # Additional keys for key rotation (optional)
+            # Older keys can be kept here to decrypt existing secrets
+            # - name: key2
+            #   secret: <another-base64-encoded-32-byte-key>
+
+      # Identity provider (no encryption) - fallback for reading old data
+      # Keep this as the last provider
+      - identity: {}
+
+# Note: The first provider in the list is used for encryption.
+# All providers are tried in order for decryption.
+
+# Key Requirements:
+# - aescbc requires exactly 32 bytes (256 bits)
+# - Keys must be base64-encoded
+# - Keep keys secure and never commit to version control
+
+# Security Warning:
+# AES-CBC is vulnerable to padding oracle attacks.
+# For new deployments, consider using aesgcm or secretbox instead:
+#
+# - aesgcm:
+#     keys:
+#       - name: key1
+#         secret: <base64-encoded-32-byte-key>
+#
+# - secretbox:
+#     keys:
+#       - name: key1
+#         secret: <base64-encoded-32-byte-key>

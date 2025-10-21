@@ -1,0 +1,31 @@
+# Binaries (in root directory only)
+/etcd-secret-reader
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# etcd snapshots
+*.db
+
+# Encryption keys (never commit these!)
+*encryption-config*.yaml
+!examples/encryption-config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
