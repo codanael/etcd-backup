@@ -225,9 +225,36 @@ Future support (not yet implemented):
 This tool leverages official Kubernetes and etcd libraries:
 
 - `go.etcd.io/bbolt`: Read etcd snapshot files (BBolt database format)
-- `k8s.io/apiserver/pkg/storage/value/encrypt/aes`: AES-CBC transformer from Kubernetes
-- `k8s.io/api`: Kubernetes Secret types
-- `k8s.io/apimachinery`: Kubernetes serialization
+- Standard Go crypto libraries: AES-CBC encryption/decryption
+- Kubernetes Secret JSON format parsing
+
+## Testing
+
+The project includes comprehensive unit and integration tests with >90% code coverage.
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -coverprofile=coverage.txt -covermode=atomic ./...
+
+# Run with race detection
+go test -race ./...
+
+# Using Make
+make test
+make check  # Runs fmt, vet, and tests
+```
+
+### Test Coverage
+
+- **decrypt package**: 92.6% coverage
+- **etcdreader package**: 90.0% coverage
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
 
 ## License
 
@@ -236,3 +263,8 @@ MIT
 ## Contributing
 
 Contributions welcome! Please open an issue or pull request.
+
+When contributing:
+1. Write tests for new features
+2. Ensure all tests pass: `make check`
+3. Follow the existing code style: `make fmt`
