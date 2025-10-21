@@ -1,0 +1,184 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0, v2.1.3, etc.
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write  # Required to create releases and upload assets
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Define target platforms
+        include:
+          - goos: linux
+            goarch: amd64
+            platform: linux-amd64
+          - goos: linux
+            goarch: arm64
+            platform: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            platform: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            platform: windows-amd64
+            extension: .exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=dev-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME="etcd-secret-reader${{ matrix.extension }}"
+          go build -v -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o "$BINARY_NAME" ./cmd/etcd-secret-reader
+
+          # Create archive
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            # Create zip for Windows
+            zip "etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip" \
+              "$BINARY_NAME" README.md examples/
+          else
+            # Create tar.gz for Unix-like systems
+            tar -czf "etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.tar.gz" \
+              "$BINARY_NAME" README.md examples/
+          fi
+
+      - name: Generate checksums
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sha256sum etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip \
+              > etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.zip.sha256
+          else
+            sha256sum etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.tar.gz \
+              > etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.tar.gz.sha256
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: etcd-secret-reader-${{ matrix.platform }}
+          path: |
+            etcd-secret-reader-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}.*
+          retention-days: 5
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec mv {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## etcd-secret-reader Release
+
+          A command-line tool to read and decrypt Kubernetes secrets from encrypted etcd backups.
+
+          ### Downloads
+
+          Choose the appropriate binary for your platform:
+
+          - **Linux AMD64**: `etcd-secret-reader-*-linux-amd64.tar.gz`
+          - **Linux ARM64**: `etcd-secret-reader-*-linux-arm64.tar.gz`
+          - **macOS AMD64** (Intel): `etcd-secret-reader-*-darwin-amd64.tar.gz`
+          - **macOS ARM64** (Apple Silicon): `etcd-secret-reader-*-darwin-arm64.tar.gz`
+          - **Windows AMD64**: `etcd-secret-reader-*-windows-amd64.zip`
+
+          ### Installation
+
+          **Linux/macOS:**
+          ```bash
+          # Download the appropriate archive
+          tar -xzf etcd-secret-reader-*-<platform>.tar.gz
+          chmod +x etcd-secret-reader
+          sudo mv etcd-secret-reader /usr/local/bin/
+          ```
+
+          **Windows:**
+          ```powershell
+          # Extract the zip file and add to PATH
+          ```
+
+          ### Verification
+
+          Verify the download using SHA256 checksums:
+          ```bash
+          sha256sum -c etcd-secret-reader-*-<platform>.tar.gz.sha256
+          ```
+
+          ### Usage
+
+          ```bash
+          # List secrets in snapshot
+          etcd-secret-reader --snapshot=snapshot.db --list
+
+          # Decrypt a specific secret
+          etcd-secret-reader \
+            --snapshot=snapshot.db \
+            --namespace=default \
+            --name=my-secret \
+            --key=<base64-encoded-key>
+          ```
+
+          ### What's Changed
+
+          See the [README](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/README.md) for full documentation.
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release-notes.md
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

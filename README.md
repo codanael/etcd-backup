@@ -17,8 +17,51 @@ A command-line tool to read and decrypt Kubernetes secrets from encrypted etcd b
 
 ## Installation
 
+### Option 1: Download Pre-built Binary (Recommended)
+
+Download the latest release for your platform from the [Releases page](../../releases):
+
+**Linux/macOS:**
+```bash
+# Download and extract (replace VERSION and PLATFORM)
+VERSION=v1.0.0
+PLATFORM=linux-amd64  # or linux-arm64, darwin-amd64, darwin-arm64
+
+wget https://github.com/codanael/etcd-backup/releases/download/${VERSION}/etcd-secret-reader-${VERSION}-${PLATFORM}.tar.gz
+tar -xzf etcd-secret-reader-${VERSION}-${PLATFORM}.tar.gz
+chmod +x etcd-secret-reader
+sudo mv etcd-secret-reader /usr/local/bin/
+```
+
+**Windows:**
+```powershell
+# Download the .zip file and extract it
+# Add the extracted directory to your PATH
+```
+
+### Option 2: Build from Source
+
+**Using Make (recommended):**
+```bash
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-all
+
+# Install to /usr/local/bin
+make install
+```
+
+**Using Go directly:**
 ```bash
 go build -o etcd-secret-reader ./cmd/etcd-secret-reader
+```
+
+### Verify Installation
+
+```bash
+etcd-secret-reader --version
 ```
 
 ## Usage

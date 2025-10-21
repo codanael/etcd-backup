@@ -11,6 +11,9 @@ import (
 	"github.com/codanael/etcd-secret-reader/pkg/etcdreader"
 )
 
+// version is set during build time via -ldflags
+var version = "dev"
+
 func main() {
 	// Command line flags
 	snapshotPath := flag.String("snapshot", "", "Path to etcd snapshot file (required)")
@@ -19,8 +22,15 @@ func main() {
 	encryptionKey := flag.String("key", "", "Base64-encoded 32-byte AES-CBC encryption key (required)")
 	keyName := flag.String("key-name", "key1", "Name of the encryption key")
 	listOnly := flag.Bool("list", false, "List all secrets without decrypting")
+	showVersion := flag.Bool("version", false, "Show version information")
 
 	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		fmt.Printf("etcd-secret-reader version %s\n", version)
+		os.Exit(0)
+	}
 
 	if *snapshotPath == "" {
 		fmt.Fprintf(os.Stderr, "Error: --snapshot is required\n")
