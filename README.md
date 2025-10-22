@@ -229,6 +229,8 @@ If `--list` shows "Secrets in snapshot: (no secrets found)", try these steps:
    - Secrets are stored under the expected prefix (`/registry/secrets/`)
    - The snapshot is a valid etcd v3 snapshot
 
+   The output will highlight secrets with a `[SECRET]` prefix and show how many keys match the secrets prefix. Keys containing binary data will be displayed with escape sequences to prevent terminal corruption.
+
 2. **Verify your snapshot is from etcd v3:**
    ```bash
    file snapshot.db

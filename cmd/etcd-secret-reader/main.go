@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"unicode"
 
 	"github.com/codanael/etcd-secret-reader/pkg/decrypt"
 	"github.com/codanael/etcd-secret-reader/pkg/etcdreader"
@@ -13,6 +15,31 @@ import (
 
 // version is set during build time via -ldflags
 var version = "dev"
+
+// isPrintable checks if a string contains only printable characters
+func isPrintable(s string) bool {
+	for _, r := range s {
+		if r == '\n' || r == '\r' || r == '\t' {
+			continue
+		}
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// safePrintKey prints a key in a safe format for console output
+func safePrintKey(key string) string {
+	// If the key is printable, return it as-is
+	if isPrintable(key) {
+		return key
+	}
+
+	// If the key contains binary data, show it in quoted format
+	// This will escape non-printable characters
+	return fmt.Sprintf("%q (contains binary data)", key)
+}
 
 func main() {
 	// Command line flags
@@ -55,8 +82,30 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("All keys in snapshot (%d total):\n", len(keys))
+
+		// Count how many are secrets
+		secretCount := 0
 		for _, k := range keys {
-			fmt.Printf("  %s\n", k)
+			if strings.HasPrefix(k, "/registry/secrets/") {
+				secretCount++
+			}
+		}
+
+		if secretCount > 0 {
+			fmt.Printf("  (%d keys match /registry/secrets/ prefix)\n\n", secretCount)
+		} else {
+			fmt.Println("  (no keys match /registry/secrets/ prefix)")
+			fmt.Println()
+		}
+
+		for _, k := range keys {
+			safeKey := safePrintKey(k)
+			// Highlight secrets
+			if strings.HasPrefix(k, "/registry/secrets/") {
+				fmt.Printf("  [SECRET] %s\n", safeKey)
+			} else {
+				fmt.Printf("  %s\n", safeKey)
+			}
 		}
 		return
 	}
