@@ -66,7 +66,7 @@ func (r *Reader) ListSecrets() ([]string, error) {
 		// etcd stores data in the "key" bucket
 		bucket := tx.Bucket([]byte("key"))
 		if bucket == nil {
-			return fmt.Errorf("key bucket not found in snapshot")
+			return fmt.Errorf("key bucket not found in snapshot - this may not be a valid etcd v3 snapshot")
 		}
 
 		// Iterate through keys

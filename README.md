@@ -98,6 +98,7 @@ etcd-secret-reader --version
 - `--key`: Base64-encoded 32-byte AES-CBC encryption key (required for decryption)
 - `--key-name`: Name of the encryption key (default: "key1")
 - `--list`: List all secrets without decrypting
+- `--list-all`: List all keys in the snapshot (for debugging)
 
 ## How It Works
 
@@ -212,6 +213,31 @@ Future support (not yet implemented):
 - aesgcm: AES-GCM with random nonce
 - secretbox: XSalsa20 and Poly1305
 - kms: External Key Management Service
+
+## Troubleshooting
+
+### No secrets found when listing
+
+If `--list` shows "Secrets in snapshot: (no secrets found)", try these steps:
+
+1. **Use `--list-all` to see all keys in the snapshot:**
+   ```bash
+   ./etcd-secret-reader --snapshot=snapshot.db --list-all
+   ```
+   This will show you all keys in the snapshot and help you verify:
+   - The snapshot contains data
+   - Secrets are stored under the expected prefix (`/registry/secrets/`)
+   - The snapshot is a valid etcd v3 snapshot
+
+2. **Verify your snapshot is from etcd v3:**
+   ```bash
+   file snapshot.db
+   # Should show: snapshot.db: data
+   ```
+
+3. **Ensure the snapshot was taken from the control plane node** where the Kubernetes API server stores data in etcd
+
+4. **Check if secrets are encrypted or stored under a different path** in your Kubernetes cluster configuration
 
 ## Security Considerations
 
