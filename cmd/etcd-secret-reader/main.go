@@ -22,6 +22,7 @@ func main() {
 	encryptionKey := flag.String("key", "", "Base64-encoded 32-byte AES-CBC encryption key (required)")
 	keyName := flag.String("key-name", "key1", "Name of the encryption key")
 	listOnly := flag.Bool("list", false, "List all secrets without decrypting")
+	listAll := flag.Bool("list-all", false, "List all keys in the snapshot (for debugging)")
 	showVersion := flag.Bool("version", false, "Show version information")
 
 	flag.Parse()
@@ -46,6 +47,20 @@ func main() {
 	}
 	defer reader.Close()
 
+	// List all keys mode (for debugging)
+	if *listAll {
+		keys, err := reader.ListAll()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing all keys: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("All keys in snapshot (%d total):\n", len(keys))
+		for _, k := range keys {
+			fmt.Printf("  %s\n", k)
+		}
+		return
+	}
+
 	// List mode
 	if *listOnly {
 		secrets, err := reader.ListSecrets()
@@ -53,9 +68,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error listing secrets: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Secrets in snapshot:")
-		for _, s := range secrets {
-			fmt.Printf("  %s\n", s)
+		fmt.Printf("Secrets in snapshot (%d found):\n", len(secrets))
+		if len(secrets) == 0 {
+			fmt.Println("  (no secrets found)")
+			fmt.Println("\nTip: Use --list-all to see all keys in the snapshot and verify the correct prefix.")
+		} else {
+			for _, s := range secrets {
+				fmt.Printf("  %s\n", s)
+			}
 		}
 		return
 	}
