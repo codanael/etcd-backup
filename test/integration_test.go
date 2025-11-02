@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	"github.com/codanael/etcd-secret-reader/pkg/decrypt"
 	"github.com/codanael/etcd-secret-reader/pkg/etcdreader"
 	bolt "go.etcd.io/bbolt"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/server/v3/mvcc/buckets"
 )
 
 // KubernetesSecret represents a Kubernetes Secret object
@@ -99,13 +102,14 @@ func createTestSnapshotWithSecrets(t *testing.T, key []byte, keyName string, sec
 	}
 	defer db.Close()
 
-	// Populate with encrypted secrets
+	// Populate with encrypted secrets using MVCC encoding
 	err = db.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte("key"))
+		bucket, err := tx.CreateBucketIfNotExists(buckets.Key.Name())
 		if err != nil {
 			return err
 		}
 
+		rev := int64(1)
 		for path, data := range secrets {
 			// Parse namespace and name from path
 			// Expected format: /registry/secrets/<namespace>/<name>
@@ -136,10 +140,33 @@ func createTestSnapshotWithSecrets(t *testing.T, key []byte, keyName string, sec
 			// Create and encrypt secret
 			encryptedData := createEncryptedSecret(t, key, keyName, namespace, name, data)
 
-			// Store in database
-			if err := bucket.Put([]byte(path), encryptedData); err != nil {
+			// Create MVCC revision key
+			revBytes := make([]byte, 17)
+			binary.BigEndian.PutUint64(revBytes[0:8], uint64(rev))
+			revBytes[8] = '_'
+			binary.BigEndian.PutUint64(revBytes[9:17], 0)
+
+			// Create MVCC KeyValue protobuf
+			kv := &mvccpb.KeyValue{
+				Key:   []byte(path),
+				Value: encryptedData,
+				CreateRevision: rev,
+				ModRevision:    rev,
+				Version:        1,
+			}
+
+			// Marshal to protobuf
+			kvBytes, err := kv.Marshal()
+			if err != nil {
 				return err
 			}
+
+			// Store with MVCC revision as key
+			if err := bucket.Put(revBytes, kvBytes); err != nil {
+				return err
+			}
+
+			rev++
 		}
 
 		return nil
@@ -341,11 +368,33 @@ func TestPlaintextSecretHandling(t *testing.T) {
 	jsonData, _ := json.Marshal(plaintextSecret)
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte("key"))
+		bucket, err := tx.CreateBucketIfNotExists(buckets.Key.Name())
 		if err != nil {
 			return err
 		}
-		return bucket.Put([]byte("/registry/secrets/default/plaintext-secret"), jsonData)
+
+		// Create MVCC revision key
+		revBytes := make([]byte, 17)
+		binary.BigEndian.PutUint64(revBytes[0:8], 1)
+		revBytes[8] = '_'
+		binary.BigEndian.PutUint64(revBytes[9:17], 0)
+
+		// Create MVCC KeyValue protobuf
+		kv := &mvccpb.KeyValue{
+			Key:            []byte("/registry/secrets/default/plaintext-secret"),
+			Value:          jsonData,
+			CreateRevision: 1,
+			ModRevision:    1,
+			Version:        1,
+		}
+
+		// Marshal to protobuf
+		kvBytes, err := kv.Marshal()
+		if err != nil {
+			return err
+		}
+
+		return bucket.Put(revBytes, kvBytes)
 	})
 	db.Close()
 

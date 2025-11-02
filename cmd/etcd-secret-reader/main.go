@@ -11,6 +11,9 @@ import (
 
 	"github.com/codanael/etcd-secret-reader/pkg/decrypt"
 	"github.com/codanael/etcd-secret-reader/pkg/etcdreader"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
 // version is set during build time via -ldflags
@@ -157,9 +160,22 @@ func main() {
 
 	// Get specific secret or all secrets
 	if *namespace != "" && *secretName != "" {
-		// Get specific secret
-		key := fmt.Sprintf("/registry/secrets/%s/%s", *namespace, *secretName)
-		encryptedData, err := reader.Get(key)
+		// Try both standard Kubernetes and OpenShift secret paths
+		var encryptedData []byte
+		var err error
+
+		keys := []string{
+			fmt.Sprintf("/registry/secrets/%s/%s", *namespace, *secretName),
+			fmt.Sprintf("/kubernetes.io/secrets/%s/%s", *namespace, *secretName),
+		}
+
+		for _, key := range keys {
+			encryptedData, err = reader.Get(key)
+			if err == nil {
+				break
+			}
+		}
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading secret: %v\n", err)
 			os.Exit(1)
@@ -209,64 +225,103 @@ func main() {
 }
 
 func parseSecretPath(path string) (namespace, name string) {
-	// Path format: /registry/secrets/<namespace>/<name>
-	parts := []rune(path)
-	slashCount := 0
-	nsStart := -1
-	nsEnd := -1
-	nameStart := -1
+	// Support both formats:
+	// /registry/secrets/<namespace>/<name>
+	// /kubernetes.io/secrets/<namespace>/<name>
 
-	for i, c := range parts {
-		if c == '/' {
-			slashCount++
-			if slashCount == 3 {
-				nsStart = i + 1
-			} else if slashCount == 4 {
-				nsEnd = i
-				nameStart = i + 1
-			}
+	// Split path by '/' and filter out empty parts
+	parts := strings.Split(path, "/")
+	var nonEmptyParts []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmptyParts = append(nonEmptyParts, p)
 		}
 	}
 
-	if nsStart > 0 && nsEnd > nsStart {
-		namespace = string(parts[nsStart:nsEnd])
-	}
-	if nameStart > 0 {
-		name = string(parts[nameStart:])
+	// Path should be: [prefix, "secrets", namespace, name]
+	// e.g., ["registry", "secrets", "default", "my-secret"]
+	// or ["kubernetes.io", "secrets", "openshift-etcd", "etcd-metric-signer"]
+	if len(nonEmptyParts) >= 4 {
+		namespace = nonEmptyParts[len(nonEmptyParts)-2]
+		name = nonEmptyParts[len(nonEmptyParts)-1]
 	}
 
 	return
 }
 
 func displaySecret(namespace, name string, data []byte) error {
-	// Parse Kubernetes Secret
-	var secret map[string]interface{}
-	if err := json.Unmarshal(data, &secret); err != nil {
-		return fmt.Errorf("failed to parse secret JSON: %w", err)
-	}
-
 	fmt.Printf("Secret: %s/%s\n", namespace, name)
 
-	// Display type
-	if secretType, ok := secret["type"].(string); ok {
-		fmt.Printf("Type: %s\n", secretType)
+	// Try to detect format: protobuf vs JSON
+	var secret *corev1.Secret
+	var err error
+
+	// Check if it's protobuf (starts with "k8s\x00")
+	if len(data) > 4 && data[0] == 'k' && data[1] == '8' && data[2] == 's' && data[3] == 0 {
+		// Decode protobuf
+		secret, err = decodeProtobufSecret(data)
+		if err != nil {
+			return fmt.Errorf("failed to decode protobuf secret: %w", err)
+		}
+	} else {
+		// Try JSON
+		secret, err = decodeJSONSecret(data)
+		if err != nil {
+			return fmt.Errorf("failed to parse secret (tried both protobuf and JSON): %w", err)
+		}
 	}
 
+	// Display type
+	fmt.Printf("Type: %s\n", secret.Type)
+
 	// Display data
-	if secretData, ok := secret["data"].(map[string]interface{}); ok {
+	if len(secret.Data) > 0 {
 		fmt.Println("Data:")
-		for key, val := range secretData {
-			if valStr, ok := val.(string); ok {
-				// Data is base64-encoded in Kubernetes secrets
-				decoded, err := base64.StdEncoding.DecodeString(valStr)
-				if err == nil {
-					fmt.Printf("  %s: %s\n", key, string(decoded))
-				} else {
-					fmt.Printf("  %s: %s (base64)\n", key, valStr)
-				}
-			}
+		for key, val := range secret.Data {
+			fmt.Printf("  %s: %s\n", key, string(val))
+		}
+	}
+
+	// Display string data if present
+	if len(secret.StringData) > 0 {
+		fmt.Println("StringData:")
+		for key, val := range secret.StringData {
+			fmt.Printf("  %s: %s\n", key, val)
 		}
 	}
 
 	return nil
+}
+
+func decodeProtobufSecret(data []byte) (*corev1.Secret, error) {
+	// Create a Kubernetes scheme and decoder
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add core/v1 to scheme: %w", err)
+	}
+
+	// Create a codec factory
+	codecFactory := serializer.NewCodecFactory(scheme)
+	decoder := codecFactory.UniversalDeserializer()
+
+	// Decode the protobuf data
+	obj, _, err := decoder.Decode(data, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode: %w", err)
+	}
+
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil, fmt.Errorf("decoded object is not a Secret, got %T", obj)
+	}
+
+	return secret, nil
+}
+
+func decodeJSONSecret(data []byte) (*corev1.Secret, error) {
+	var secret corev1.Secret
+	if err := json.Unmarshal(data, &secret); err != nil {
+		return nil, err
+	}
+	return &secret, nil
 }

@@ -1,14 +1,17 @@
 package etcdreader
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
 
 	bolt "go.etcd.io/bbolt"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/server/v3/mvcc/buckets"
 )
 
-// createTestSnapshot creates a test etcd snapshot database
+// createTestSnapshot creates a test etcd snapshot database with MVCC encoding
 func createTestSnapshot(t *testing.T, data map[string][]byte) string {
 	t.Helper()
 
@@ -22,17 +25,42 @@ func createTestSnapshot(t *testing.T, data map[string][]byte) string {
 	}
 	defer db.Close()
 
-	// Create the "key" bucket and populate it with test data
+	// Create the "key" bucket and populate it with MVCC-encoded data
 	err = db.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte("key"))
+		bucket, err := tx.CreateBucketIfNotExists(buckets.Key.Name())
 		if err != nil {
 			return err
 		}
 
+		rev := int64(1)
 		for key, value := range data {
-			if err := bucket.Put([]byte(key), value); err != nil {
+			// Create MVCC revision key (8 bytes main + 1 byte separator + 8 bytes sub)
+			revBytes := make([]byte, 17)
+			binary.BigEndian.PutUint64(revBytes[0:8], uint64(rev))
+			revBytes[8] = '_'
+			binary.BigEndian.PutUint64(revBytes[9:17], 0) // sub revision = 0
+
+			// Create MVCC KeyValue protobuf
+			kv := &mvccpb.KeyValue{
+				Key:   []byte(key),
+				Value: value,
+				CreateRevision: rev,
+				ModRevision:    rev,
+				Version:        1,
+			}
+
+			// Marshal to protobuf
+			kvBytes, err := kv.Marshal()
+			if err != nil {
 				return err
 			}
+
+			// Store with MVCC revision as key
+			if err := bucket.Put(revBytes, kvBytes); err != nil {
+				return err
+			}
+
+			rev++
 		}
 
 		return nil
