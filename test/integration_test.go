@@ -148,8 +148,8 @@ func createTestSnapshotWithSecrets(t *testing.T, key []byte, keyName string, sec
 
 			// Create MVCC KeyValue protobuf
 			kv := &mvccpb.KeyValue{
-				Key:   []byte(path),
-				Value: encryptedData,
+				Key:            []byte(path),
+				Value:          encryptedData,
 				CreateRevision: rev,
 				ModRevision:    rev,
 				Version:        1,

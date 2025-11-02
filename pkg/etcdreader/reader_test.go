@@ -42,8 +42,8 @@ func createTestSnapshot(t *testing.T, data map[string][]byte) string {
 
 			// Create MVCC KeyValue protobuf
 			kv := &mvccpb.KeyValue{
-				Key:   []byte(key),
-				Value: value,
+				Key:            []byte(key),
+				Value:          value,
 				CreateRevision: rev,
 				ModRevision:    rev,
 				Version:        1,
