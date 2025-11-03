@@ -49,47 +49,5 @@ jobs:
       - name: Build
         run: go build -v ./cmd/etcd-secret-reader
 
-      - name: Run tests (if any)
+      - name: Run tests
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-        continue-on-error: true
-
-  build-matrix:
-    name: Build (${{ matrix.platform }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            platform: linux-amd64
-          - goos: linux
-            goarch: arm64
-            platform: linux-arm64
-          - goos: darwin
-            goarch: amd64
-            platform: darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            platform: darwin-arm64
-          - goos: windows
-            goarch: amd64
-            platform: windows-amd64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache: true
-
-      - name: Build for ${{ matrix.platform }}
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          go build -v -trimpath -ldflags="-s -w" -o etcd-secret-reader ./cmd/etcd-secret-reader
-          echo "✓ Successfully built for ${{ matrix.platform }}"
