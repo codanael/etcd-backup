@@ -32,7 +32,6 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
     # Custom naming to match existing convention: etcd-secret-reader-v1.0.0-linux-amd64.tar.gz
     name_template: >-
       {{ .ProjectName }}-{{ .Version }}-
@@ -45,7 +44,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
       - examples/**/*
