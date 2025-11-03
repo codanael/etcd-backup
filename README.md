@@ -33,6 +33,51 @@ make install        # Install to /usr/local/bin
 go build -o etcd-secret-reader ./cmd/etcd-secret-reader
 ```
 
+**Docker**:
+```bash
+docker pull ghcr.io/codanael/etcd-secret-reader:latest
+
+# Run with mounted snapshot
+docker run -v /path/to/snapshot.db:/snapshot.db ghcr.io/codanael/etcd-secret-reader:latest \
+  --snapshot=/snapshot.db --list
+```
+
+## Verifying Release Artifacts
+
+All release artifacts are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing for enhanced security.
+
+**Install cosign**:
+```bash
+# Via go install
+go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+
+# Or download from https://github.com/sigstore/cosign/releases
+```
+
+**Verify checksums file** (recommended - verifies integrity of all artifacts):
+```bash
+# Download checksums and signature files
+wget https://github.com/codanael/etcd-backup/releases/download/v1.0.0/checksums.txt
+wget https://github.com/codanael/etcd-backup/releases/download/v1.0.0/checksums.txt.pem
+wget https://github.com/codanael/etcd-backup/releases/download/v1.0.0/checksums.txt.sig
+
+# Verify the signature (replace v1.0.0 with your version)
+cosign verify-blob \
+  --certificate-identity 'https://github.com/codanael/etcd-backup/.github/workflows/release.yml@refs/tags/v1.0.0' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  --cert checksums.txt.pem \
+  --signature checksums.txt.sig \
+  checksums.txt
+
+# If verification succeeds, verify your downloaded archive
+sha256sum --ignore-missing -c checksums.txt
+```
+
+**Why this matters**: Signature verification ensures:
+- The release was built by the official GitHub Actions workflow
+- Artifacts haven't been tampered with since release
+- The release comes from the authenticated repository
+
 ## Usage
 
 ### Basic Commands

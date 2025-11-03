@@ -112,7 +112,8 @@ version:
 		echo "Binary not built yet. Run 'make build' first."; \
 	fi
 
-# Create release archives (like GitHub Actions does)
+# Create release archives for local testing
+# NOTE: CI/CD uses GoReleaser for official releases (see .goreleaser.yaml)
 release: build-all
 	@echo "Creating release archives..."
 	@mkdir -p $(BUILD_DIR)/archives
@@ -166,10 +167,12 @@ help:
 	@echo "  make install     - Install binary to /usr/local/bin"
 	@echo "  make clean       - Clean build artifacts"
 	@echo "  make version     - Show version"
-	@echo "  make release     - Create release archives (set VERSION=v1.0.0)"
+	@echo "  make release     - Create release archives for local testing (set VERSION=v1.0.0)"
 	@echo "  make help        - Show this help message"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make build                    - Build with version 'dev'"
 	@echo "  make build VERSION=v1.0.0     - Build with version 'v1.0.0'"
-	@echo "  make release VERSION=v1.0.0   - Create release archives"
+	@echo "  make release VERSION=v1.0.0   - Create release archives locally"
+	@echo ""
+	@echo "Note: Official releases use GoReleaser in CI/CD. See .goreleaser.yaml"
