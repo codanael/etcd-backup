@@ -68,7 +68,13 @@ signs:
 
 sboms:
   - id: archive
+    cmd: syft
     artifacts: archive
+    args:
+      - scan
+      - "$artifact"
+      - "--output"
+      - "spdx-json=$document"
     documents:
       - >-
         {{ .ProjectName }}-{{ .Version }}-
