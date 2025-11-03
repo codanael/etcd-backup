@@ -52,6 +52,47 @@ make fmt
 make vet
 ```
 
+### Releases
+
+**Official releases** are built and published using GoReleaser in CI/CD (`.github/workflows/release.yml`):
+
+```bash
+# Test GoReleaser configuration locally (no publish)
+goreleaser release --snapshot --clean --skip=publish
+
+# Build for current platform only (faster for testing)
+goreleaser build --snapshot --single-target --clean
+
+# Check configuration
+goreleaser check
+```
+
+**Key features of GoReleaser setup** (`.goreleaser.yaml`):
+- Builds for 5 platforms: Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64)
+- **Cosign signing**: All releases are signed with keyless signing (no key management needed)
+- **Docker images**: Multi-arch images published to `ghcr.io/codanael/etcd-secret-reader`
+- **SBOM generation**: Software Bill of Materials for each artifact via Syft
+- Custom archive naming: `etcd-secret-reader-v1.0.0-linux-amd64.tar.gz` (maintains backward compatibility)
+- Includes README.md and examples/ in all archives
+
+**Release process**:
+1. Create and push a version tag: `git tag -a v1.0.0 -m "Release v1.0.0" && git push origin v1.0.0`
+2. GitHub Actions automatically runs GoReleaser
+3. Builds are signed with cosign using GitHub's OIDC identity
+4. Docker images are signed and pushed to GitHub Container Registry
+5. GitHub release is created with all artifacts, checksums, signatures, and SBOMs
+
+**Verifying local builds**:
+```bash
+# After local goreleaser build
+ls -lh dist/
+
+# Verify checksums locally
+cd dist && sha256sum -c checksums.txt
+```
+
+**Note**: The Makefile's `make release` target creates archives locally for testing, but **official releases use GoReleaser** for consistency, signing, and multi-platform builds.
+
 ## Code Architecture
 
 ### Package Structure

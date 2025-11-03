@@ -1,0 +1,226 @@
+# GoReleaser configuration for etcd-secret-reader
+# Documentation: https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: etcd-secret-reader
+    main: ./cmd/etcd-secret-reader
+    binary: etcd-secret-reader
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Exclude unnecessary combinations
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: default
+    # Custom naming to match existing convention: etcd-secret-reader-v1.0.0-linux-amd64.tar.gz
+    name_template: >-
+      {{ .ProjectName }}-{{ .Version }}-
+      {{- if eq .Os "darwin" }}darwin
+      {{- else if eq .Os "linux" }}linux
+      {{- else if eq .Os "windows" }}windows
+      {{- end }}-
+      {{- if eq .Arch "amd64" }}amd64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - examples/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+signs:
+  - cmd: cosign
+    certificate: '${artifact}.pem'
+    signature: '${artifact}.sig'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - --yes
+    artifacts: checksum
+    output: true
+
+sboms:
+  - id: archive
+    artifacts: archive
+    documents:
+      - >-
+        {{ .ProjectName }}-{{ .Version }}-
+        {{- if eq .Os "darwin" }}darwin
+        {{- else if eq .Os "linux" }}linux
+        {{- else if eq .Os "windows" }}windows
+        {{- end }}-
+        {{- if eq .Arch "amd64" }}amd64
+        {{- else if eq .Arch "arm64" }}arm64
+        {{- else }}{{ .Arch }}{{ end }}.sbom.json
+
+dockers:
+  - image_templates:
+      - 'ghcr.io/codanael/{{.ProjectName}}:{{ .Version }}-amd64'
+      - 'ghcr.io/codanael/{{.ProjectName}}:latest-amd64'
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title={{.ProjectName}}
+      - --label=org.opencontainers.image.description=Read and decrypt Kubernetes secrets from encrypted etcd backups
+      - --label=org.opencontainers.image.url=https://github.com/codanael/etcd-backup
+      - --label=org.opencontainers.image.source=https://github.com/codanael/etcd-backup
+      - --label=org.opencontainers.image.version={{.Version}}
+      - --label=org.opencontainers.image.created={{.Date}}
+      - --label=org.opencontainers.image.revision={{.FullCommit}}
+      - --label=org.opencontainers.image.licenses=MIT
+    goos: linux
+    goarch: amd64
+
+  - image_templates:
+      - 'ghcr.io/codanael/{{.ProjectName}}:{{ .Version }}-arm64'
+      - 'ghcr.io/codanael/{{.ProjectName}}:latest-arm64'
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.title={{.ProjectName}}
+      - --label=org.opencontainers.image.description=Read and decrypt Kubernetes secrets from encrypted etcd backups
+      - --label=org.opencontainers.image.url=https://github.com/codanael/etcd-backup
+      - --label=org.opencontainers.image.source=https://github.com/codanael/etcd-backup
+      - --label=org.opencontainers.image.version={{.Version}}
+      - --label=org.opencontainers.image.created={{.Date}}
+      - --label=org.opencontainers.image.revision={{.FullCommit}}
+      - --label=org.opencontainers.image.licenses=MIT
+    goos: linux
+    goarch: arm64
+
+docker_manifests:
+  - name_template: 'ghcr.io/codanael/{{.ProjectName}}:{{ .Version }}'
+    image_templates:
+      - 'ghcr.io/codanael/{{.ProjectName}}:{{ .Version }}-amd64'
+      - 'ghcr.io/codanael/{{.ProjectName}}:{{ .Version }}-arm64'
+
+  - name_template: 'ghcr.io/codanael/{{.ProjectName}}:latest'
+    image_templates:
+      - 'ghcr.io/codanael/{{.ProjectName}}:latest-amd64'
+      - 'ghcr.io/codanael/{{.ProjectName}}:latest-arm64'
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - sign
+      - '${artifact}@${digest}'
+      - --yes
+    artifacts: all
+    output: true
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - 'typo'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: codanael
+    name: etcd-backup
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## etcd-secret-reader {{ .Tag }}
+
+    A command-line tool to read and decrypt Kubernetes secrets from encrypted etcd backups without requiring a full cluster restore.
+
+    ### 🔐 Signature Verification
+
+    All release artifacts are signed with [cosign](https://github.com/sigstore/cosign) using keyless signing.
+
+    To verify the checksums file:
+    ```bash
+    # Install cosign
+    go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+
+    # Download checksums and signature
+    wget https://github.com/codanael/etcd-backup/releases/download/{{ .Tag }}/checksums.txt
+    wget https://github.com/codanael/etcd-backup/releases/download/{{ .Tag }}/checksums.txt.pem
+    wget https://github.com/codanael/etcd-backup/releases/download/{{ .Tag }}/checksums.txt.sig
+
+    # Verify signature
+    cosign verify-blob \
+      --certificate-identity 'https://github.com/codanael/etcd-backup/.github/workflows/release.yml@refs/tags/{{ .Tag }}' \
+      --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+      --cert checksums.txt.pem \
+      --signature checksums.txt.sig \
+      checksums.txt
+
+    # Verify your downloaded archive
+    sha256sum --ignore-missing -c checksums.txt
+    ```
+
+    ### 📦 Installation
+
+    **Linux/macOS:**
+    ```bash
+    # Download the appropriate archive for your platform
+    tar -xzf etcd-secret-reader-{{ .Tag }}-<platform>.tar.gz
+    chmod +x etcd-secret-reader
+    sudo mv etcd-secret-reader /usr/local/bin/
+    ```
+
+    **Windows:**
+    ```powershell
+    # Extract the zip file and add to PATH
+    ```
+
+    **Docker:**
+    ```bash
+    docker pull ghcr.io/codanael/etcd-secret-reader:{{ .Tag }}
+    ```
+
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/codanael/etcd-backup/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    🤖 Released with [GoReleaser](https://goreleaser.com)
