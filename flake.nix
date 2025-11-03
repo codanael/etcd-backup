@@ -27,6 +27,9 @@
           go-task
           delve
           etcd
+          cosign
+          goreleaser
+          syft
         ];
       };
     };
